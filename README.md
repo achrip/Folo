@@ -4,7 +4,7 @@ emoji: 🌖
 colorFrom: pink
 colorTo: red
 sdk: gradio
-sdk_version: 5.7.1
+sdk_version: 5.8.0
 app_file: app.py
 pinned: false
 short_description: Follow your subject to regions in your frame!
