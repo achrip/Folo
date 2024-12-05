@@ -7,3 +7,4 @@ imutils==0.5.4
 opencv-contrib-python==4.10.0.84
 opencv-python==4.10.0.84
 cv2-enumerate-cameras==1.1.17
+gradio==5.8.0
