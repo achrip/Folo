@@ -8,6 +8,7 @@ image = cv2.imread(os.path.join(image_dir, image_files[1]))
 
 height, width, _ = image.shape
 
+# start & end point untuk setiap papan
 start_point = (420, 254)
 end_point = (870, 380)
 color = (0, 255, 0)
