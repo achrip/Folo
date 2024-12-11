@@ -1,4 +1,3 @@
-python==3.10.9
 matplotlib==3.7.1
 scikit-learn==1.3.0
 numpy==1.23.3
@@ -6,5 +5,4 @@ pandas==2.2.3
 imutils==0.5.4 
 opencv-contrib-python==4.10.0.84
 opencv-python==4.10.0.84
-cv2-enumerate-cameras==1.1.17
 gradio==5.8.0
