@@ -2,8 +2,8 @@ import os
 
 import cv2 as cv
 import gradio as gr
-import numpy as np
 
+flag = True
 
 def extract_frames(in_dirpath, out_dirpath): 
     if not os.path.exists(out_dirpath): 
@@ -27,72 +27,80 @@ def extract_frames(in_dirpath, out_dirpath):
         capture.release()
 
 def classify(dirpath, out_dirpath): 
-    positive_dirpath = os.path.join(out_dirpath, 'positive' )
-    negative_dirpath = os.path.join(out_dirpath, 'negative' )
-    cc = cv.CascadeClassifier(cv.data.haarcascades + 'haarcascade_fullbody.xml')
-
-    if not os.path.exists(positive_dirpath): 
-        os.makedirs(positive_dirpath)
-
-    if not os.path.exists(negative_dirpath): 
-        os.makedirs(negative_dirpath)
-
-    images = os.listdir(dirpath)
-    for filename in images: 
-        image = cv.imread(os.path.join(dirpath, filename), 0)
-        obj = cc.detectMultiScale(image, 1.05, 3)
-
-        if len(obj) < 1: 
-            cv.imwrite(os.path.join(negative_dirpath, filename),
-                       cv.cvtColor(image, cv.COLOR_GRAY2RGB))
-
-        # an object (fullbody) is detected. draw a bounding box 
-        # around it
-        for (x, y, w, h) in obj: 
-            cv.rectangle(image, (x, y), (x+w, y+h), (0, 255, 0), 3)
-        
-        cv.imwrite(os.path.join(positive_dirpath, filename),
-                   cv.cvtColor(image, cv.COLOR_GRAY2RGB))
-
-def magic(frame, algo): 
     pass
 
+def magic(): 
+    global flag 
+    if not flag: 
+        flag = True
+    cap = cv.VideoCapture(0)
+    while flag: 
+        _, frame = cap.read()
+        frame_rgb = cv.cvtColor(frame, cv.COLOR_BGR2RGB)
+        frame_board = contouring(frame_rgb)       
+        view = change_view(frame_board, None)
+        yield view
+    pass
+
+def change_view(frame, label): 
+    if label == "Papan 1": 
+        pass
+    elif label == "Papan 2": 
+        pass
+    elif label == "Papan 3": 
+        pass
+    return frame
+
+def stop_streaming(): 
+    global flag
+    flag = False
+
+def otsu_thresh(image): 
+    image_grayscale = cv.cvtColor(image, cv.COLOR_BGR2GRAY)
+    image_blurred = cv.GaussianBlur(image_grayscale, (5, 5), 0)
+
+    _, binary_image = cv.threshold(image_blurred, 0, 255, cv.THRESH_BINARY + cv.THRESH_OTSU)
+
+    return binary_image
+
+def contouring(image): 
+    binary_image = otsu_thresh(image)
+    contours, _ = cv.findContours(binary_image, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)
+
+    largest_contour = max(contours, key=cv.contourArea)
+
+    x, y, w, h = cv.boundingRect(largest_contour)
+
+    roi = image[y:y+h, x:x+w]
+    #roi = binary_image[y:y+h, x:x+w]
+    # consider adding few more pixels for the sake of padding
+
+    return roi
 
 with gr.Blocks() as demo: 
     with gr.Row(): 
-        with gr.Column(): 
-            model_picker = gr.Dropdown(choices=['Viola-Jones', 'DPM', 'Yolov8', 'MobileNet-SSD'],
-                                       value='Yolov8', label='Models')
-            input_image = gr.Image(sources=['webcam'], 
-                                   type='numpy')
-        
-        with gr.Column(): 
-            with gr.Row():
-                btn_1 = gr.Button(value='Papan 1')
-                btn_2 = gr.Button(value='Papan 2')
-                btn_3 = gr.Button(value='Papan 3')
-                btn_4 = gr.Button(value='Dosen')
+        gr.Markdown("""
+                    # Lecturer Detection Aid
+                    """
+                    )
+    with gr.Row(): 
+        model = gr.Radio(choices=["Viola-Jones", "DPM", "Yolov8", "MobileNet-SSD"],
+                         label="Models", 
+                         info="")
+        view = gr.Radio(choices=["Papan 1", "Papan 2", "Papan 3", "Track", "Dosen"], 
+                        label="View", 
+                        info="")
 
-                upscale_algorithm = gr.Dropdown(choices=['linear', 'cubic', 'none'], 
-                                                value='none', label='Upscaling Algorithm')
+    with gr.Column(): 
+        output= gr.Image(streaming=True)
+        main_button = gr.Button("Start", variant="primary")
+        stop_button = gr.Button("Stop", variant="stop")
 
-            output_img = gr.Image(streaming=True)
+    main_button.click(magic, None, output)
+    stop_button.click(stop_streaming, None, None)
 
-        '''
-        the arguments `concurrency_limit` is ideally based on the received input
-        and desired output FPS. if this is not applicable, then just for the latter.
-
-        the `stream_every` value is obtained by dividing 1 by the value of concurrency
-        limit. this is to ensure that the video playback has exactly the FPS that
-        we desire. 
-        '''
-        # input_image.stream(lambda f, m: f, [input_image, model_picker], [output_img], 
-        #                    stream_every=0.0416666667, concurrency_limit=24)
-
-        input_image.stream(magic, [input_image, upscale_algorithm], [output_img], 
-                           stream_every=0.0417083750,  concurrency_limit=24)
 if __name__ == "__main__": 
-    # demo.launch()
+    demo.launch()
     pass
 
 '''
@@ -107,6 +115,7 @@ TODO:
     - program each button to display a different segment of the image when pressed
     - 
 Notes: 
+    - video input dapet dari opencv ajah
     - connected components analysis itu bagus untuk developing, bukan untuk prod. 
       (ga perlu pake cc analysis lagi kita)
     - kualitas thresholding lebih diutamakan. 
