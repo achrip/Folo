@@ -55,16 +55,7 @@ def classify(dirpath, out_dirpath):
                    cv.cvtColor(image, cv.COLOR_GRAY2RGB))
 
 def magic(frame, algo): 
-    color = (255, 255, 0)
-    thickness = 10
-    start = (300, 400)
-    end = (800, 600)
-    frame = np.array(frame)
-    cv.rectangle(frame, start, end, color, thickness)
-    cv.imshow('iframe', frame)
-    cv.waitKey(0)
-    cv.destroyAllWindows()
-    return frame
+    pass
 
 
 with gr.Blocks() as demo: 
@@ -101,8 +92,24 @@ with gr.Blocks() as demo:
         input_image.stream(magic, [input_image, upscale_algorithm], [output_img], 
                            stream_every=0.0417083750,  concurrency_limit=24)
 if __name__ == "__main__": 
-    demo.launch()
-    # extract_frames('./dataset/videos/', './dataset/images/')
-    # classify('./dataset/images/', './dataset')
+    # demo.launch()
     pass
 
+'''
+Flowchart 
+
+capture video -> get frames -> thresholding -> contouring -> (A)
+> setelah contouring, kita akan punya papan tulis aja. 
+
+(A) -> board segmenting -> 0/1 classification
+
+TODO: 
+    - program each button to display a different segment of the image when pressed
+    - 
+Notes: 
+    - connected components analysis itu bagus untuk developing, bukan untuk prod. 
+      (ga perlu pake cc analysis lagi kita)
+    - kualitas thresholding lebih diutamakan. 
+    - pakai binary thresholding kayak Otsu dan Binary.
+      **JANGAN PAKE ADAPTIVE ATAU NON-BINARY!**
+'''
