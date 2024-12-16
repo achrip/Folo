@@ -1,62 +1,40 @@
-import os
-
 import cv2 as cv
 import gradio as gr
 
-flag = True
+video_is_running = True
+(x, y, w, h) = -1,-1,-1,-1
+main_view = "" 
+middle_frame_width = -1
 
-def extract_frames(in_dirpath, out_dirpath): 
-    if not os.path.exists(out_dirpath): 
-        os.makedirs(out_dirpath)
-
-    videos = os.listdir(in_dirpath)
-
-    frame_count = 0
-    for filename in videos: 
-        capture = cv.VideoCapture(os.path.join(in_dirpath, filename))
-        
-        while True: 
-            ret, frame = capture.read()
-
-            if not ret: 
-                break
-
-            cv.imwrite(os.path.join(out_dirpath, f'{frame_count:04d}.png'), frame)
-            frame_count += 1
-
-        capture.release()
-
-def classify(dirpath, out_dirpath): 
-    pass
-
-def magic(): 
-    global flag 
-    if not flag: 
-        flag = True
-    cap = cv.VideoCapture(0)
-    while flag: 
-        _, frame = cap.read()
-        frame_rgb = cv.cvtColor(frame, cv.COLOR_BGR2RGB)
-        frame_board = contouring(frame_rgb)       
-        view = change_view(frame_board, None)
-        yield view
-    pass
-
-def change_view(frame, label): 
-    if label == "Papan 1": 
-        pass
-    elif label == "Papan 2": 
-        pass
-    elif label == "Papan 3": 
-        pass
+def update_view(frame, board_view, len = 400): 
+    frame_width = frame.shape[1]
+    mid = frame_width // 2
+    board_start = mid - len // 2
+    board_end = mid + len // 2
+    print(f"{frame.shape}/{board_view}/{len}")
+    if board_view == "Papan 1": 
+        return frame[:, :board_start]
+    elif board_view == "Papan 2": 
+        return frame[:, board_start:board_end]
+    elif board_view == "Papan 3": 
+        return frame[:, board_end:]
     return frame
 
 def stop_streaming(): 
-    global flag
-    flag = False
+    global video_is_running
+    video_is_running = False
+
+def change_view(view): 
+    global main_view 
+    main_view = view
+
+def change_width(width): 
+    global middle_frame_width
+    middle_frame_width = width
 
 def otsu_thresh(image): 
     image_grayscale = cv.cvtColor(image, cv.COLOR_BGR2GRAY)
+    image_grayscale = cv.equalizeHist(image_grayscale)
     image_blurred = cv.GaussianBlur(image_grayscale, (5, 5), 0)
 
     _, binary_image = cv.threshold(image_blurred, 0, 255, cv.THRESH_BINARY + cv.THRESH_OTSU)
@@ -69,13 +47,36 @@ def contouring(image):
 
     largest_contour = max(contours, key=cv.contourArea)
 
-    x, y, w, h = cv.boundingRect(largest_contour)
+    global x, y, w, h
 
-    roi = image[y:y+h, x:x+w]
-    #roi = binary_image[y:y+h, x:x+w]
-    # consider adding few more pixels for the sake of padding
+    if -1 in (x, y, w, h):
+        x, y, w, h = cv.boundingRect(largest_contour)
+
+    x = x-20 if x-20 > 0 else 0
+    y = y-20 if y-20 > 0 else 0
+    roi = image[y:y+h+20, x:x+w+20]
 
     return roi
+
+def magic(model): 
+    '''
+    model   : object detection model that is used for person tracking.
+    view    : view option for the boards.
+    width_m : width of the middle board which varies according to rooms.
+    '''
+    global video_is_running, main_view, middle_frame_width
+    if not video_is_running: 
+        video_is_running = True
+    cap = cv.VideoCapture("./dataset/videos/MVI_0013.MOV")
+    while video_is_running: 
+        ret, frame = cap.read()
+        if not ret: 
+            return
+        frame_rgb = cv.cvtColor(frame, cv.COLOR_BGR2RGB)
+        frame_board = contouring(frame_rgb)       
+        frame_display = update_view(frame_board, main_view, middle_frame_width)
+        print(frame_display)
+        yield frame_display
 
 with gr.Blocks() as demo: 
     with gr.Row(): 
@@ -87,17 +88,22 @@ with gr.Blocks() as demo:
         model = gr.Radio(choices=["Viola-Jones", "DPM", "Yolov8", "MobileNet-SSD"],
                          label="Models", 
                          info="")
-        view = gr.Radio(choices=["Papan 1", "Papan 2", "Papan 3", "Track", "Dosen"], 
+        view = gr.Radio(choices=["Papan 1", "Papan 2", "Papan 3", "Tracking", "Full"], 
+                        value="Full",
                         label="View", 
                         info="")
+        width_mid = gr.Slider(minimum=400, maximum=600, value=400, 
+                              step=5, label="Lebar Papan")
 
     with gr.Column(): 
         output= gr.Image(streaming=True)
         main_button = gr.Button("Start", variant="primary")
         stop_button = gr.Button("Stop", variant="stop")
 
-    main_button.click(magic, None, output)
+    main_button.click(magic, [model], output)
     stop_button.click(stop_streaming, None, None)
+    view.change(change_view, [view], None)
+    width_mid.change(change_width, [width_mid], None)
 
 if __name__ == "__main__": 
     demo.launch()
@@ -112,13 +118,6 @@ capture video -> get frames -> thresholding -> contouring -> (A)
 (A) -> board segmenting -> 0/1 classification
 
 TODO: 
-    - program each button to display a different segment of the image when pressed
-    - 
-Notes: 
-    - video input dapet dari opencv ajah
-    - connected components analysis itu bagus untuk developing, bukan untuk prod. 
-      (ga perlu pake cc analysis lagi kita)
-    - kualitas thresholding lebih diutamakan. 
-    - pakai binary thresholding kayak Otsu dan Binary.
-      **JANGAN PAKE ADAPTIVE ATAU NON-BINARY!**
+    - add a method that will be called when the program first initializes. 
+      this method should assign new default values to global variables.
 '''
