@@ -1,24 +1,33 @@
 import cv2 as cv
 import gradio as gr
+from ultralytics import YOLO
+import time
 
 video_is_running = True
 (x, y, w, h) = -1,-1,-1,-1
 main_view = "" 
 middle_frame_width = -1
 
-def update_view(frame, board_view, len = 400): 
+def update_view(frame, board_view, len, width): 
     frame_width = frame.shape[1]
     mid = frame_width // 2
     board_start = mid - len // 2
     board_end = mid + len // 2
-    print(f"{frame.shape}/{board_view}/{len}")
     if board_view == "Papan 1": 
         return frame[:, :board_start]
     elif board_view == "Papan 2": 
         return frame[:, board_start:board_end]
     elif board_view == "Papan 3": 
         return frame[:, board_end:]
-    return frame
+    elif board_view == "Full": 
+        return frame
+
+    if width < board_start: 
+        return frame[:, :board_start]
+    elif width <= board_end: 
+        return frame[:, board_start:board_end]
+    elif width > board_end: 
+        return frame[:, board_end:]
 
 def stop_streaming(): 
     global video_is_running
@@ -42,6 +51,7 @@ def otsu_thresh(image):
     return binary_image
 
 def contouring(image): 
+    image = image[:550, :]
     binary_image = otsu_thresh(image)
     contours, _ = cv.findContours(binary_image, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)
 
@@ -52,8 +62,8 @@ def contouring(image):
     if -1 in (x, y, w, h):
         x, y, w, h = cv.boundingRect(largest_contour)
 
-    x = x-20 if x-20 > 0 else 0
-    y = y-20 if y-20 > 0 else 0
+    #x = x-20 if x-20 > 0 else 0
+    #y = y-20 if y-20 > 0 else 0
     roi = image[y:y+h+20, x:x+w+20]
 
     return roi
@@ -62,21 +72,22 @@ def magic(model):
     '''
     model   : object detection model that is used for person tracking.
     view    : view option for the boards.
-    width_m : width of the middle board which varies according to rooms.
+    width_m : width of the middle board which varies according to rooms
     '''
+    model = YOLO("yolo11n.pt")
     global video_is_running, main_view, middle_frame_width
     if not video_is_running: 
         video_is_running = True
-    cap = cv.VideoCapture("./dataset/videos/MVI_0013.MOV")
+    cap = cv.VideoCapture("./dataset/videos/MVI_0002.MOV")
     while video_is_running: 
         ret, frame = cap.read()
         if not ret: 
             return
         frame_rgb = cv.cvtColor(frame, cv.COLOR_BGR2RGB)
         frame_board = contouring(frame_rgb)       
-        frame_display = update_view(frame_board, main_view, middle_frame_width)
-        print(frame_display)
+        frame_display = update_view(frame_board, main_view, middle_frame_width, w)
         yield frame_display
+        #time.sleep(.02)
 
 with gr.Blocks() as demo: 
     with gr.Row(): 
@@ -85,7 +96,8 @@ with gr.Blocks() as demo:
                     """
                     )
     with gr.Row(): 
-        model = gr.Radio(choices=["Viola-Jones", "DPM", "Yolov8", "MobileNet-SSD"],
+        model = gr.Radio(choices=["Viola-Jones", "DPM", "Yolo", "MobileNet-SSD"],
+                         value="Yolo",
                          label="Models", 
                          info="")
         view = gr.Radio(choices=["Papan 1", "Papan 2", "Papan 3", "Tracking", "Full"], 
@@ -96,7 +108,7 @@ with gr.Blocks() as demo:
                               step=5, label="Lebar Papan")
 
     with gr.Column(): 
-        output= gr.Image(streaming=True)
+        output= gr.Image(streaming=True, type="numpy")
         main_button = gr.Button("Start", variant="primary")
         stop_button = gr.Button("Stop", variant="stop")
 

@@ -171,6 +171,8 @@ def cc_analysis_with_stats(image, opt):
 if __name__== "__main__": 
     path = "./dataset/images"
     for filename in os.listdir(path): 
+        if filename != "9300.png": 
+            continue
         image = cv2.imread(os.path.join(path, filename), 0)
         #print(image.shape)
         image_cropped = image[:550, :]
