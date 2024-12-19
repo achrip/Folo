@@ -67,7 +67,7 @@ def magic(model):
     global video_is_running, main_view, middle_frame_width
     if not video_is_running: 
         video_is_running = True
-    cap = cv.VideoCapture("./dataset/videos/MVI_0013.MOV")
+    cap = cv.VideoCapture(0)
     while video_is_running: 
         ret, frame = cap.read()
         if not ret: 
