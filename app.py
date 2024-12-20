@@ -8,7 +8,7 @@ video_is_running = True
 (x, y, w, h) = -1,-1,-1,-1
 main_view = "" 
 middle_frame_width = -1
-bbox_width = 1
+bbox_width = 0
 
 def update_view(frame, board_view, len, model): 
     frame_width = frame.shape[1]
@@ -24,9 +24,16 @@ def update_view(frame, board_view, len, model):
     elif board_view == "Full": 
         return frame
 
-    objects = model(frame)
+    if model is not None: 
+        objects = model(frame)
+    else: 
+        return
 
     global bbox_width
+
+    if bbox_width == 0: 
+        bbox_width = mid
+        
     for object in objects: 
         boxes = object.boxes.xyxy
         classes = object.boxes.cls
