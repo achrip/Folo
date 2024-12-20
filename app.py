@@ -1,14 +1,16 @@
+import time
+
 import cv2 as cv
 import gradio as gr
 from ultralytics import YOLO
-import time
 
 video_is_running = True
 (x, y, w, h) = -1,-1,-1,-1
 main_view = "" 
 middle_frame_width = -1
+bbox_width = 0
 
-def update_view(frame, board_view, len, width): 
+def update_view(frame, board_view, len, model): 
     frame_width = frame.shape[1]
     mid = frame_width // 2
     board_start = mid - len // 2
@@ -22,11 +24,33 @@ def update_view(frame, board_view, len, width):
     elif board_view == "Full": 
         return frame
 
-    if width < board_start: 
+    if model is not None: 
+        objects = model(frame)
+    else: 
+        return
+
+    global bbox_width
+
+    if bbox_width == 0: 
+        bbox_width = mid
+        
+    for object in objects: 
+        boxes = object.boxes.xyxy
+        classes = object.boxes.cls
+
+        for box, klass in zip(boxes, classes): 
+            if klass != 0 : 
+                # this means the object is not a person
+                continue
+            x1, _, x2, _ = map(int, box)
+            bbox_width = (x1 + x2) // 2
+            break
+
+    if bbox_width < board_start: 
         return frame[:, :board_start]
-    elif width <= board_end: 
+    elif bbox_width <= board_end: 
         return frame[:, board_start:board_end]
-    elif width > board_end: 
+    elif bbox_width > board_end: 
         return frame[:, board_end:]
 
 def stop_streaming(): 
@@ -74,6 +98,7 @@ def model_picker(model_name):
     elif model_name.lower() == "dpm": 
         pass
     elif model_name.lower() == "yolo": 
+        return YOLO("yolo11n.pt")
         pass
     elif model_name.lower() == "ssd-mobilenet":
         pass
@@ -83,13 +108,14 @@ def live_inference(frame, model_name, view):
     main_view = view if main_view != "" else view
     model = model_picker(model_name)
     frame_board = contouring(frame)
-    frame_display = update_view(frame_board, main_view, middle_frame_width, w)
+    frame_display = update_view(frame_board, main_view, middle_frame_width, model)
     return frame_display
 
 def magic(model_name, view): 
     global video_is_running, main_view, middle_frame_width
     main_view = view if main_view != "" else view
-    cap = cv.VideoCapture("./dataset/videos/MVI_0002.MOV")
+    cap = cv.VideoCapture(0)
+    model = model_picker(model_name)
     if not video_is_running: 
         video_is_running = True
     while video_is_running: 
@@ -98,8 +124,9 @@ def magic(model_name, view):
             return
         frame_rgb = cv.cvtColor(frame, cv.COLOR_BGR2RGB)
         frame_board = contouring(frame_rgb)       
-        frame_display = update_view(frame_board, main_view, middle_frame_width, w)
+        frame_display = update_view(frame_board, main_view, middle_frame_width, model)
         yield frame_display
+        time.sleep(.015)
 
     cap.release()
 
@@ -107,9 +134,29 @@ with gr.Blocks() as demo:
     with gr.Row(): 
         gr.Markdown("""
                     # Lecturer Detection Aid
+
+                    This is a demonstration for a VBL aiding software that gives the user
+                    ability to automatically follow the lecturer wherever they go within
+                    the whiteboard region while also retaining the ability to check each
+                    whiteboards independently. The program works by cropping the input image
+                    to fit the whiteboard, and then using an object detection model it
+                    checks wherever the lecturer is positioned within the area. 
+
+                    Some limitations within this demonstration are: 
+
+                    1. Currently working object detection model is YOLO.
+                    2. Changing the width of the whiteboard have to be done manually.
+                    3. Limited to only one person in frame (lecturer). Any other objects
+                    that can be identified as a person may destroy the experience.
+                    4. This is designed with Binus University's class model in mind. 
+
+                    Suggestions are very welcome!
                     """
                     )
     with gr.Tab("Live Demo"): 
+        gr.Markdown("""
+
+                    """)
         with gr.Row(): 
             live_model = gr.Radio(choices=["Viola-Jones", "DPM", "Yolo", "MobileNet-SSD"],
                                   value="Yolo",
@@ -124,7 +171,7 @@ with gr.Blocks() as demo:
             live_output = gr.Image(streaming=True)
 
         live_viewport_width = gr.Slider(minimum=300, maximum=600, value=400, 
-                                            step=5, label="Lebar Papan")
+                                            step=5, label="Frame Width")
 
     live_input.stream(
         live_inference,
@@ -135,6 +182,12 @@ with gr.Blocks() as demo:
     )
 
     with gr.Tab("Local Demo"): 
+        with gr.Row():
+            gr.Markdown("""
+                        To try this demo, make sure that you are running this program via
+                        the CLI of your host machine and not through HuggingFace Spaces. 
+                        They do not work well with OpenCV's `VideoCapture` module.
+                        """)
         with gr.Row(): 
             local_model = gr.Radio(choices=["Viola-Jones", "DPM", "Yolo", "MobileNet-SSD"],
                              value="Yolo",
@@ -145,7 +198,7 @@ with gr.Blocks() as demo:
                             label="View", 
                             info="")
             local_viewport_width = gr.Slider(minimum=300, maximum=600, value=400, 
-                                            step=5, label="Lebar Papan")
+                                            step=5, label="Frame Width")
 
         local_output= gr.Image(streaming=True, type="numpy")
         with gr.Row(): 
@@ -159,16 +212,3 @@ with gr.Blocks() as demo:
 
 if __name__ == "__main__": 
     demo.launch()
-
-'''
-Flowchart 
-
-capture video -> get frames -> thresholding -> contouring -> (A)
-> setelah contouring, kita akan punya papan tulis aja. 
-
-(A) -> board segmenting -> 0/1 classification
-
-TODO: 
-    - add a method that will be called when the program first initializes. 
-      this method should assign new default values to global variables.
-'''
