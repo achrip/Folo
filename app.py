@@ -1,14 +1,16 @@
+import time
+
 import cv2 as cv
 import gradio as gr
 from ultralytics import YOLO
-import time
 
 video_is_running = True
 (x, y, w, h) = -1,-1,-1,-1
 main_view = "" 
 middle_frame_width = -1
+bbox_width = 1
 
-def update_view(frame, board_view, len, width): 
+def update_view(frame, board_view, len, model): 
     frame_width = frame.shape[1]
     mid = frame_width // 2
     board_start = mid - len // 2
@@ -22,11 +24,26 @@ def update_view(frame, board_view, len, width):
     elif board_view == "Full": 
         return frame
 
-    if width < board_start: 
+    objects = model(frame)
+
+    global bbox_width
+    for object in objects: 
+        boxes = object.boxes.xyxy
+        classes = object.boxes.cls
+
+        for box, klass in zip(boxes, classes): 
+            if klass != 0 : 
+                # this means the object is not a person
+                continue
+            x1, _, x2, _ = map(int, box)
+            bbox_width = (x1 + x2) // 2
+            break
+
+    if bbox_width < board_start: 
         return frame[:, :board_start]
-    elif width <= board_end: 
+    elif bbox_width <= board_end: 
         return frame[:, board_start:board_end]
-    elif width > board_end: 
+    elif bbox_width > board_end: 
         return frame[:, board_end:]
 
 def stop_streaming(): 
@@ -74,6 +91,7 @@ def model_picker(model_name):
     elif model_name.lower() == "dpm": 
         pass
     elif model_name.lower() == "yolo": 
+        return YOLO("yolo11n.pt")
         pass
     elif model_name.lower() == "ssd-mobilenet":
         pass
@@ -83,13 +101,14 @@ def live_inference(frame, model_name, view):
     main_view = view if main_view != "" else view
     model = model_picker(model_name)
     frame_board = contouring(frame)
-    frame_display = update_view(frame_board, main_view, middle_frame_width, w)
+    frame_display = update_view(frame_board, main_view, middle_frame_width, model)
     return frame_display
 
 def magic(model_name, view): 
     global video_is_running, main_view, middle_frame_width
     main_view = view if main_view != "" else view
-    cap = cv.VideoCapture("./dataset/videos/MVI_0002.MOV")
+    cap = cv.VideoCapture("./dataset/videos/MVI_0014.MOV")
+    model = model_picker(model_name)
     if not video_is_running: 
         video_is_running = True
     while video_is_running: 
@@ -98,8 +117,9 @@ def magic(model_name, view):
             return
         frame_rgb = cv.cvtColor(frame, cv.COLOR_BGR2RGB)
         frame_board = contouring(frame_rgb)       
-        frame_display = update_view(frame_board, main_view, middle_frame_width, w)
+        frame_display = update_view(frame_board, main_view, middle_frame_width, model)
         yield frame_display
+        time.sleep(.03)
 
     cap.release()
 
