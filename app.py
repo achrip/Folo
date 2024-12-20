@@ -68,17 +68,30 @@ def contouring(image):
 
     return roi
 
-def magic(model): 
-    '''
-    model   : object detection model that is used for person tracking.
-    view    : view option for the boards.
-    width_m : width of the middle board which varies according to rooms
-    '''
-    model = YOLO("yolo11n.pt")
+def model_picker(model_name): 
+    if model_name.lower() == "viola-jones": 
+        pass
+    elif model_name.lower() == "dpm": 
+        pass
+    elif model_name.lower() == "yolo": 
+        pass
+    elif model_name.lower() == "ssd-mobilenet":
+        pass
+
+def live_inference(frame, model_name, view): 
     global video_is_running, main_view, middle_frame_width
+    main_view = view if main_view != "" else view
+    model = model_picker(model_name)
+    frame_board = contouring(frame)
+    frame_display = update_view(frame_board, main_view, middle_frame_width, w)
+    return frame_display
+
+def magic(model_name, view): 
+    global video_is_running, main_view, middle_frame_width
+    main_view = view if main_view != "" else view
+    cap = cv.VideoCapture("./dataset/videos/MVI_0002.MOV")
     if not video_is_running: 
         video_is_running = True
-    cap = cv.VideoCapture("./dataset/videos/MVI_0002.MOV")
     while video_is_running: 
         ret, frame = cap.read()
         if not ret: 
@@ -87,7 +100,8 @@ def magic(model):
         frame_board = contouring(frame_rgb)       
         frame_display = update_view(frame_board, main_view, middle_frame_width, w)
         yield frame_display
-        #time.sleep(.02)
+
+    cap.release()
 
 with gr.Blocks() as demo: 
     with gr.Row(): 
@@ -95,31 +109,56 @@ with gr.Blocks() as demo:
                     # Lecturer Detection Aid
                     """
                     )
-    with gr.Row(): 
-        model = gr.Radio(choices=["Viola-Jones", "DPM", "Yolo", "MobileNet-SSD"],
-                         value="Yolo",
-                         label="Models", 
-                         info="")
-        view = gr.Radio(choices=["Papan 1", "Papan 2", "Papan 3", "Tracking", "Full"], 
-                        value="Full",
-                        label="View", 
-                        info="")
-        width_mid = gr.Slider(minimum=400, maximum=600, value=400, 
-                              step=5, label="Lebar Papan")
+    with gr.Tab("Live Demo"): 
+        with gr.Row(): 
+            live_model = gr.Radio(choices=["Viola-Jones", "DPM", "Yolo", "MobileNet-SSD"],
+                                  value="Yolo",
+                                  label="Models", 
+                                  info="")
+            live_view = gr.Radio(choices=["Papan 1", "Papan 2", "Papan 3", "Tracking", "Full"], 
+                                 value="Full",
+                                 label="View", 
+                                 info="")
+        with gr.Row(): 
+            live_input = gr.Image(sources=["webcam"])
+            live_output = gr.Image(streaming=True)
 
-    with gr.Column(): 
-        output= gr.Image(streaming=True, type="numpy")
-        main_button = gr.Button("Start", variant="primary")
-        stop_button = gr.Button("Stop", variant="stop")
+        live_viewport_width = gr.Slider(minimum=300, maximum=600, value=400, 
+                                            step=5, label="Lebar Papan")
 
-    main_button.click(magic, [model], output)
-    stop_button.click(stop_streaming, None, None)
-    view.change(change_view, [view], None)
-    width_mid.change(change_width, [width_mid], None)
+    live_input.stream(
+        live_inference,
+        [live_input, live_model, live_viewport_width],
+        [live_output],
+        stream_every=0.0417083750,
+        concurrency_limit=24,
+    )
+
+    with gr.Tab("Local Demo"): 
+        with gr.Row(): 
+            local_model = gr.Radio(choices=["Viola-Jones", "DPM", "Yolo", "MobileNet-SSD"],
+                             value="Yolo",
+                             label="Models", 
+                             info="")
+            local_view = gr.Radio(choices=["Papan 1", "Papan 2", "Papan 3", "Tracking", "Full"], 
+                            value="Full",
+                            label="View", 
+                            info="")
+            local_viewport_width = gr.Slider(minimum=300, maximum=600, value=400, 
+                                            step=5, label="Lebar Papan")
+
+        local_output= gr.Image(streaming=True, type="numpy")
+        with gr.Row(): 
+            local_stop_button = gr.Button("Stop", variant="stop")
+            local_main_button = gr.Button("Start", variant="primary") 
+
+    local_main_button.click(magic, [local_model, local_view], local_output)
+    local_stop_button.click(stop_streaming, None, None)
+    local_view.change(change_view, [local_view], None)
+    local_viewport_width.change(change_width, [local_viewport_width], None)
 
 if __name__ == "__main__": 
     demo.launch()
-    pass
 
 '''
 Flowchart 
